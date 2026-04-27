@@ -7,9 +7,7 @@ import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 from datetime import datetime, timedelta
 
-# -------------------------------------------------
-# CONFIG
-# -------------------------------------------------
+# ---------------- CONFIG ----------------
 st.set_page_config(
     page_title="Predict Stocks - India",
     page_icon="📈",
@@ -18,21 +16,20 @@ st.set_page_config(
 
 st.markdown("<style>footer{visibility:hidden;}</style>", unsafe_allow_html=True)
 
-# -------------------------------------------------
-# OPEN INDIAN STOCK SEARCH API (NO KEY)
-# -------------------------------------------------
+# ---------------- OPEN INDIAN STOCK SEARCH API ----------------
 @st.cache_data(ttl=300)
 def search_indian_stocks(query):
-    url = "http://65.0.104.9/search"
     try:
-        r = requests.get(url, params={"q": query}, timeout=5)
+        r = requests.get(
+            "http://65.0.104.9/search",
+            params={"q": query},
+            timeout=5
+        )
         return r.json().get("results", [])
     except:
         return []
 
-# -------------------------------------------------
-# LOAD STOCK DATA
-# -------------------------------------------------
+# ---------------- LOAD STOCK DATA ----------------
 @st.cache_data(ttl=300)
 def load_stock_data(symbol, years=5):
     end = datetime.today()
@@ -50,75 +47,57 @@ def calculate_rsi(series, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-# -------------------------------------------------
-# SIDEBAR NAVIGATION
-# -------------------------------------------------
-st.sidebar.title("📊 Predict Stocks (India)")
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("Predict Stocks (India)")
 
 page = st.sidebar.radio(
     "Navigate",
     [
         "Home",
-        "Search & Select Stock",
+        "Search Stock",
         "Technical Analysis",
         "Screener",
         "Pattern Signal",
-        "Next-Day Forecast"
+        "Next Day Forecast"
     ]
 )
 
-# -------------------------------------------------
-# HOME
-# -------------------------------------------------
+# ---------------- HOME ----------------
 if page == "Home":
-    st.title("📈 Indian Stock Market Screener & Prediction")
+    st.title("Indian Stock Market Screener & Prediction")
 
-    st.markdown("""
-An **all-in-one Indian stock analysis tool** for NSE stocks.
+    st.write("Live NSE stock analysis using open APIs.")
+    st.write("Search stocks, view indicators, screen trends, and forecast prices.")
 
-✅ Live market data  
-✅ Company name search  
-✅ Technical indicators  
-✅ Screeners  
-✅ ML-based next-day prediction  
+# ---------------- SEARCH STOCK ----------------
+elif page == "Search Stock":
+    st.title("Search Indian Stocks")
 
-**No API keys required**
-""")
-
-# -------------------------------------------------
-# SEARCH & SELECT STOCK
-# -------------------------------------------------
-elif page == "Search & Select Stock":
-    st.title("🔎 Search Indian Stocks (Live API)")
-
-    query = st.text_input("Type company name (e.g. Reliance, Tata, HDFC)")
+    query = st.text_input("Type company name (Reliance, Tata, HDFC etc.)")
 
     if len(query) >= 2:
         results = search_indian_stocks(query)
 
         if results:
-            options = {
-                f"{r['company_name']} ({r['symbol']}.NS)": r["symbol"] + ".NS"
-                for r in results
-            }
+            options = {}
+            for r in results:
+                options[f"{r['company_name']} ({r['symbol']}.NS)"] = r["symbol"] + ".NS"
 
             selected = st.selectbox("Select Stock", list(options.keys()))
             symbol = options[selected]
 
-            st.success(f"Selected Stock: {symbol}")
+            st.success("Selected: " + symbol)
 
             df = load_stock_data(symbol)
             st.line_chart(df["Close"])
         else:
-            st.warning("No matching stocks found.")
+            st.warning("No stocks found.")
 
-# -------------------------------------------------
-# TECHNICAL ANALYSIS
-# -------------------------------------------------
+# ---------------- TECHNICAL ANALYSIS ----------------
 elif page == "Technical Analysis":
-    st.title("📈 Technical Analysis")
+    st.title("Technical Analysis")
 
-    symbol = st.text_input("Enter NSE Symbol", "RELIANCE.NS")
+    symbol = st.text_input("NSE Symbol", "RELIANCE.NS")
     df = load_stock_data(symbol)
 
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -139,15 +118,13 @@ elif page == "Technical Analysis":
     fig.update_layout(height=600)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.metric("Latest RSI", round(df["RSI"].iloc[-1], 2))
+    st.metric("RSI", round(df["RSI"].iloc[-1], 2))
 
-# -------------------------------------------------
-# SCREENER
-# -------------------------------------------------
+# ---------------- SCREENER ----------------
 elif page == "Screener":
-    st.title("🧮 Stock Screener")
+    st.title("Stock Screener")
 
-    symbol = st.text_input("Enter NSE Symbol", "INFY.NS")
+    symbol = st.text_input("NSE Symbol", "INFY.NS")
     df = load_stock_data(symbol)
 
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -160,13 +137,11 @@ elif page == "Screener":
     col1.metric("Trend", trend)
     col2.metric("Breakout", breakout)
 
-# -------------------------------------------------
-# PATTERN SIGNAL
-# -------------------------------------------------
+# ---------------- PATTERN SIGNAL ----------------
 elif page == "Pattern Signal":
-    st.title("🕯️ Candlestick Signal")
+    st.title("Candlestick Pattern Signal")
 
-    symbol = st.text_input("Enter NSE Symbol", "HDFCBANK.NS")
+    symbol = st.text_input("NSE Symbol", "HDFCBANK.NS")
     df = load_stock_data(symbol, 1)
 
     last = df.iloc[-1]
@@ -178,15 +153,13 @@ elif page == "Pattern Signal":
     elif last["Close"] < last["Open"] and prev["Close"] > prev["Open"]:
         signal = "Bearish Engulfing"
 
-    st.metric("Detected Signal", signal)
+    st.metric("Signal", signal)
 
-# -------------------------------------------------
-# NEXT-DAY FORECAST
-# -------------------------------------------------
-elif page == "Next-Day Forecast":
-    st.title("🤖 Next-Day Price Forecast")
+# ---------------- NEXT DAY FORECAST ----------------
+elif page == "Next Day Forecast":
+    st.title("Next Day Price Forecast")
 
-    symbol = st.text_input("Enter NSE Symbol", "TRIDENT.NS")
+    symbol = st.text_input("NSE Symbol", "TRIDENT.NS")
     df = load_stock_data(symbol)
 
     df["t"] = np.arange(len(df))
@@ -197,7 +170,4 @@ elif page == "Next-Day Forecast":
     model.fit(X, y)
 
     prediction = model.predict([[len(df)]])[0]
-
-    st.metric("Predicted Next Close", f"₹ {round(prediction,2)}")
-    st.caption("Baseline ML model (deploy-safe).")
-``
+    st.metric("Predicted Next Close", "₹ " + str(round(prediction, 2)))
