@@ -1,8 +1,5 @@
 streamlit
-requests
+yfinance
 pandas
 numpy
-yfinance
-plotly
 scikit-learn
-pnsea
