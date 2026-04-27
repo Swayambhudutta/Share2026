@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -10,45 +11,39 @@ from datetime import datetime, timedelta
 # CONFIG
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Predict Stocks",
+    page_title="Predict Stocks – India",
     page_icon="📈",
     layout="wide"
 )
 
-st.markdown(
-    "<style>footer{visibility:hidden;}</style>",
-    unsafe_allow_html=True
-)
+st.markdown("<style>footer{visibility:hidden;}</style>", unsafe_allow_html=True)
 
 # -------------------------------------------------
-# SIDEBAR NAVIGATION
-# -------------------------------------------------
-st.sidebar.title("📊 Predict Stocks")
-
-page = st.sidebar.radio(
-    "Navigate",
-    [
-        "Home",
-        "Fundamental Info",
-        "Technical Indicators",
-        "Screener",
-        "Pattern Recognition",
-        "Next-Day Forecasting"
-    ]
-)
-
-# -------------------------------------------------
-# COMMON UTIL
+# OPEN INDIAN STOCK SEARCH API
 # -------------------------------------------------
 @st.cache_data(ttl=300)
-def load_data(ticker, years=5):
+def search_indian_stocks(query):
+    url = "http://65.0.104.9/search"
+    params = {"q": query}
+    try:
+        r = requests.get(url, params=params, timeout=5)
+        data = r.json()
+        return data.get("results", [])
+    except:
+        return []
+
+# -------------------------------------------------
+# LOAD STOCK DATA
+# -------------------------------------------------
+@st.cache_data(ttl=300)
+def load_stock_data(symbol, years=5):
     end = datetime.today()
     start = end - timedelta(days=365 * years)
-    df = yf.download(ticker, start, end)
+    df = yf.download(symbol, start=start, end=end)
     df.dropna(inplace=True)
     return df
 
-def rsi(series, period=14):
+def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -58,79 +53,91 @@ def rsi(series, period=14):
     return 100 - (100 / (1 + rs))
 
 # -------------------------------------------------
+# SIDEBAR NAVIGATION
+# -------------------------------------------------
+st.sidebar.title("📊 Predict Stocks (India)")
+
+page = st.sidebar.radio(
+    "Navigate",
+    [
+        "Home",
+        "Search & Select Stock",
+        "Technical Analysis",
+        "Screener",
+        "Pattern Signal",
+        "Next‑Day Forecast"
+    ]
+)
+
+# -------------------------------------------------
 # HOME
 # -------------------------------------------------
 if page == "Home":
-    st.title("📈 Stock Market Screener & Prediction")
+    st.title("📈 Indian Stock Market Screener & Prediction")
 
     st.markdown("""
-**Predict Stocks** is an all‑in‑one platform for retail investors to analyze  
-**NSE‑listed stocks** using:
+An **all‑in‑one Indian stock analysis tool** for NSE stocks.
 
-✅ Fundamental analysis  
+✅ Live market data  
+✅ Company name search  
 ✅ Technical indicators  
 ✅ Screeners  
-✅ Pattern signals  
-✅ Machine‑learning‑based forecasting  
+✅ ML‑based next‑day prediction  
 
-Data Source: **Yahoo Finance**
-    """)
-
-    st.subheader("🧭 Modules")
-    st.markdown("""
-- **Fundamental Info** – company details & financials  
-- **Technical Indicators** – RSI, EMA, MACD‑lite  
-- **Screener** – breakout & momentum signals  
-- **Pattern Recognition** – bullish / bearish logic  
-- **Next‑Day Forecasting** – ML regression model  
-    """)
+**No API keys required.**
+""")
 
 # -------------------------------------------------
-# FUNDAMENTAL INFO
+# SEARCH & SELECT STOCK
 # -------------------------------------------------
-elif page == "Fundamental Info":
-    st.title("🏢 Fundamental Information")
+elif page == "Search & Select Stock":
+    st.title("🔎 Search Indian Stocks (Live API)")
 
-    ticker = st.text_input("Enter NSE Symbol", "RELIANCE.NS")
-    stock = yf.Ticker(ticker)
-    info = stock.info
+    query = st.text_input("Type company name (e.g. Reliance, Tata, HDFC)")
 
-    st.subheader(info.get("longName", ticker))
+    if len(query) >= 2:
+        results = search_indian_stocks(query)
 
-    col1, col2 = st.columns(2)
-    col1.metric("Market Cap", info.get("marketCap", "NA"))
-    col2.metric("52W High", info.get("fiftyTwoWeekHigh", "NA"))
+        if results:
+            options = {
+                f"{r['company_name']} ({r['symbol']}.NS)": r["symbol"] + ".NS"
+                for r in results
+            }
 
-    st.markdown(f"**Sector:** {info.get('sector','NA')}")
-    st.markdown(f"**Industry:** {info.get('industry','NA')}")
+            selected = st.selectbox("Select Stock", list(options.keys()))
+            symbol = options[selected]
 
-    with st.expander("Business Summary"):
-        st.write(info.get("longBusinessSummary", "Not Available"))
+            st.success(f"Selected Stock: {symbol}")
+
+            df = load_stock_data(symbol)
+            st.line_chart(df["Close"])
+        else:
+            st.warning("No matching stocks found.")
 
 # -------------------------------------------------
-# TECHNICAL INDICATORS
+# TECHNICAL ANALYSIS
 # -------------------------------------------------
-elif page == "Technical Indicators":
-    st.title("📈 Technical Indicators")
+elif page == "Technical Analysis":
+    st.title("📈 Technical Analysis")
 
-    ticker = st.text_input("Enter NSE Symbol", "TCS.NS")
-    df = load_data(ticker)
+    symbol = st.text_input("Enter NSE Symbol", "RELIANCE.NS")
+    df = load_stock_data(symbol)
 
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
-    df["RSI"] = rsi(df["Close"])
+    df["RSI"] = calculate_rsi(df["Close"])
 
     fig = go.Figure()
-    fig.add_trace(go.Candlestick(
+    fig.add_candlestick(
         x=df.index,
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
         close=df["Close"],
         name="Price"
-    ))
-    fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], name="EMA 20"))
-    fig.add_trace(go.Scatter(x=df.index, y=df["EMA50"], name="EMA 50"))
+    )
+    fig.add_scatter(x=df.index, y=df["EMA20"], name="EMA 20")
+    fig.add_scatter(x=df.index, y=df["EMA50"], name="EMA 50")
 
     fig.update_layout(height=600)
     st.plotly_chart(fig, use_container_width=True)
@@ -141,29 +148,29 @@ elif page == "Technical Indicators":
 # SCREENER
 # -------------------------------------------------
 elif page == "Screener":
-    st.title("🔎 Stock Screener")
+    st.title("🧮 Stock Screener")
 
-    ticker = st.text_input("Enter NSE Symbol", "INFY.NS")
-    df = load_data(ticker)
+    symbol = st.text_input("Enter NSE Symbol", "INFY.NS")
+    df = load_stock_data(symbol)
 
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
 
-    breakout = "YES" if df["Close"].iloc[-1] > df["Close"].rolling(20).max().iloc[-2] else "NO"
     trend = "Bullish" if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1] else "Bearish"
+    breakout = "YES" if df["Close"].iloc[-1] > df["Close"].rolling(20).max().iloc[-2] else "NO"
 
     col1, col2 = st.columns(2)
     col1.metric("Trend", trend)
     col2.metric("Breakout", breakout)
 
 # -------------------------------------------------
-# PATTERN RECOGNITION (DEPLOY‑SAFE)
+# PATTERN SIGNAL (RULE‑BASED)
 # -------------------------------------------------
-elif page == "Pattern Recognition":
-    st.title("🕯️ Pattern Recognition")
+elif page == "Pattern Signal":
+    st.title("🕯️ Candlestick Signal")
 
-    ticker = st.text_input("Enter NSE Symbol", "HDFCBANK.NS")
-    df = load_data(ticker, 1)
+    symbol = st.text_input("Enter NSE Symbol", "HDFCBANK.NS")
+    df = load_stock_data(symbol, 1)
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
@@ -174,27 +181,26 @@ elif page == "Pattern Recognition":
     elif last["Close"] < last["Open"] and prev["Close"] > prev["Open"]:
         signal = "Bearish Engulfing"
 
-    st.metric("Detected Pattern", signal)
+    st.metric("Detected Signal", signal)
 
 # -------------------------------------------------
-# NEXT‑DAY FORECASTING (ML‑SAFE)
+# NEXT‑DAY FORECAST
 # -------------------------------------------------
-elif page == "Next-Day Forecasting":
-    st.title("🤖 Next‑Day Forecasting")
+elif page == "Next‑Day Forecast":
+    st.title("🤖 Next‑Day Price Forecast (ML)")
 
-    ticker = st.text_input("Enter NSE Symbol", "TRIDENT.NS")
-    df = load_data(ticker)
+    symbol = st.text_input("Enter NSE Symbol", "TRIDENT.NS")
+    df = load_stock_data(symbol)
 
-    df["Day"] = np.arange(len(df))
-    X = df[["Day"]]
+    df["t"] = np.arange(len(df))
+    X = df[["t"]]
     y = df["Close"]
 
     model = LinearRegression()
     model.fit(X, y)
 
-    next_day = np.array([[len(df)]])
-    prediction = model.predict(next_day)[0]
+    prediction = model.predict([[len(df)]])[0]
 
     st.metric("Predicted Next Close", f"₹ {round(prediction,2)}")
-
-    st.caption("Model: Linear Regression (deploy‑safe baseline)")
+    st.caption("Baseline ML model (deploy‑safe).")
+``
