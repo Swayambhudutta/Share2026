@@ -1,214 +1,200 @@
-# =========================================
-# MASTER TRADING & ANALYSIS STREAMLIT APP
-# =========================================
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from datetime import datetime
+from sklearn.linear_model import LinearRegression
+from datetime import datetime, timedelta
 
-# -----------------------------------------
-# PAGE CONFIG
-# -----------------------------------------
+# -------------------------------------------------
+# CONFIG
+# -------------------------------------------------
 st.set_page_config(
-    page_title="Master Trading Dashboard",
+    page_title="Predict Stocks",
+    page_icon="📈",
     layout="wide"
 )
 
-st.title("Master Trading & Analysis Dashboard")
-
-# -----------------------------------------
-# SIDEBAR CONTROLS
-# -----------------------------------------
-st.sidebar.header("Controls")
-
-asset_type = st.sidebar.selectbox(
-    "Asset Type",
-    ["Stocks", "Commodities", "Options (Index Proxy)"]
+st.markdown(
+    "<style>footer{visibility:hidden;}</style>",
+    unsafe_allow_html=True
 )
 
-symbol_input = st.sidebar.text_input(
-    "Enter Symbol",
-    "RELIANCE.NS"
-)
+# -------------------------------------------------
+# SIDEBAR NAVIGATION
+# -------------------------------------------------
+st.sidebar.title("📊 Predict Stocks")
 
-timeframe = st.sidebar.selectbox(
-    "Timeframe",
-    ["1mo", "3mo", "6mo", "1y", "2y"]
-)
-
-strategy_selected = st.sidebar.multiselect(
-    "Select Strategies (logic will be added later)",
+page = st.sidebar.radio(
+    "Navigate",
     [
-        "Trend Following",
-        "Momentum",
-        "Mean Reversion",
-        "Breakout",
-        "Swing"
+        "Home",
+        "Fundamental Info",
+        "Technical Indicators",
+        "Screener",
+        "Pattern Recognition",
+        "Next-Day Forecasting"
     ]
 )
 
-# -----------------------------------------
-# DATA FETCH
-# -----------------------------------------
+# -------------------------------------------------
+# COMMON UTIL
+# -------------------------------------------------
 @st.cache_data(ttl=300)
-def fetch_data(symbol, period):
-    df = yf.download(symbol, period=period)
+def load_data(ticker, years=5):
+    end = datetime.today()
+    start = end - timedelta(days=365 * years)
+    df = yf.download(ticker, start, end)
     df.dropna(inplace=True)
     return df
 
-# -----------------------------------------
-# INDICATORS
-# -----------------------------------------
-def add_indicators(df):
-    df["EMA_20"] = df["Close"].ewm(span=20).mean()
-    df["EMA_50"] = df["Close"].ewm(span=50).mean()
-
-    delta = df["Close"].diff()
+def rsi(series, period=14):
+    delta = series.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
     rs = avg_gain / avg_loss
-    df["RSI"] = 100 - (100 / (1 + rs))
+    return 100 - (100 / (1 + rs))
 
-    df["Return"] = df["Close"].pct_change()
-    return df
+# -------------------------------------------------
+# HOME
+# -------------------------------------------------
+if page == "Home":
+    st.title("📈 Stock Market Screener & Prediction")
 
-# -----------------------------------------
-# PRICE CHART
-# -----------------------------------------
-def price_chart(df):
+    st.markdown("""
+**Predict Stocks** is an all‑in‑one platform for retail investors to analyze  
+**NSE‑listed stocks** using:
+
+✅ Fundamental analysis  
+✅ Technical indicators  
+✅ Screeners  
+✅ Pattern signals  
+✅ Machine‑learning‑based forecasting  
+
+Data Source: **Yahoo Finance**
+    """)
+
+    st.subheader("🧭 Modules")
+    st.markdown("""
+- **Fundamental Info** – company details & financials  
+- **Technical Indicators** – RSI, EMA, MACD‑lite  
+- **Screener** – breakout & momentum signals  
+- **Pattern Recognition** – bullish / bearish logic  
+- **Next‑Day Forecasting** – ML regression model  
+    """)
+
+# -------------------------------------------------
+# FUNDAMENTAL INFO
+# -------------------------------------------------
+elif page == "Fundamental Info":
+    st.title("🏢 Fundamental Information")
+
+    ticker = st.text_input("Enter NSE Symbol", "RELIANCE.NS")
+    stock = yf.Ticker(ticker)
+    info = stock.info
+
+    st.subheader(info.get("longName", ticker))
+
+    col1, col2 = st.columns(2)
+    col1.metric("Market Cap", info.get("marketCap", "NA"))
+    col2.metric("52W High", info.get("fiftyTwoWeekHigh", "NA"))
+
+    st.markdown(f"**Sector:** {info.get('sector','NA')}")
+    st.markdown(f"**Industry:** {info.get('industry','NA')}")
+
+    with st.expander("Business Summary"):
+        st.write(info.get("longBusinessSummary", "Not Available"))
+
+# -------------------------------------------------
+# TECHNICAL INDICATORS
+# -------------------------------------------------
+elif page == "Technical Indicators":
+    st.title("📈 Technical Indicators")
+
+    ticker = st.text_input("Enter NSE Symbol", "TCS.NS")
+    df = load_data(ticker)
+
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+    df["RSI"] = rsi(df["Close"])
+
     fig = go.Figure()
-
-    fig.add_candlestick(
+    fig.add_trace(go.Candlestick(
         x=df.index,
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
-        close=df["Close"]
-    )
+        close=df["Close"],
+        name="Price"
+    ))
+    fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], name="EMA 20"))
+    fig.add_trace(go.Scatter(x=df.index, y=df["EMA50"], name="EMA 50"))
 
-    fig.add_scatter(x=df.index, y=df["EMA_20"], name="EMA 20")
-    fig.add_scatter(x=df.index, y=df["EMA_50"], name="EMA 50")
-
-    fig.update_layout(
-        height=500,
-        xaxis_rangeslider_visible=False
-    )
-
+    fig.update_layout(height=600)
     st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------------------
-# BASIC SIGNAL (PLACEHOLDER)
-# -----------------------------------------
-def generate_signal(df):
-    if df["EMA_20"].iloc[-1] > df["EMA_50"].iloc[-1]:
-        return "Bullish Trend"
-    else:
-        return "Bearish Trend"
+    st.metric("Latest RSI", round(df["RSI"].iloc[-1], 2))
 
-# -----------------------------------------
-# TOP 5 IDEAS
-# -----------------------------------------
-@st.cache_data(ttl=300)
-def top5_assets(asset_type):
-    if asset_type == "Stocks":
-        universe = [
-            "RELIANCE.NS",
-            "TCS.NS",
-            "INFY.NS",
-            "HDFCBANK.NS",
-            "ICICIBANK.NS"
-        ]
-    elif asset_type == "Commodities":
-        universe = ["GC=F", "SI=F", "CL=F", "NG=F", "HG=F"]
-    else:
-        universe = ["^NSEI", "^NSEBANK", "^BSESN", "^NSEFIN", "^CNXIT"]
+# -------------------------------------------------
+# SCREENER
+# -------------------------------------------------
+elif page == "Screener":
+    st.title("🔎 Stock Screener")
 
-    rows = []
+    ticker = st.text_input("Enter NSE Symbol", "INFY.NS")
+    df = load_data(ticker)
 
-    for u in universe:
-        try:
-            df = yf.download(u, period="5d")
-            ret = ((df["Close"].iloc[-1] / df["Close"].iloc[0]) - 1) * 100
-            rows.append([u, round(ret, 2)])
-        except:
-            pass
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
 
-    return pd.DataFrame(
-        rows,
-        columns=["Symbol", "5 Day Percent Move"]
-    ).sort_values(
-        "5 Day Percent Move",
-        ascending=False
-    ).head(5)
+    breakout = "YES" if df["Close"].iloc[-1] > df["Close"].rolling(20).max().iloc[-2] else "NO"
+    trend = "Bullish" if df["EMA20"].iloc[-1] > df["EMA50"].iloc[-1] else "Bearish"
 
-# -----------------------------------------
-# CHATBOT
-# -----------------------------------------
-def chatbot_response(question, df):
-    q = question.lower()
+    col1, col2 = st.columns(2)
+    col1.metric("Trend", trend)
+    col2.metric("Breakout", breakout)
 
-    if "trend" in q:
-        return generate_signal(df)
+# -------------------------------------------------
+# PATTERN RECOGNITION (DEPLOY‑SAFE)
+# -------------------------------------------------
+elif page == "Pattern Recognition":
+    st.title("🕯️ Pattern Recognition")
 
-    if "rsi" in q:
-        return "Latest RSI is " + str(round(df["RSI"].iloc[-1], 2))
+    ticker = st.text_input("Enter NSE Symbol", "HDFCBANK.NS")
+    df = load_data(ticker, 1)
 
-    if "price" in q:
-        return "Last close price is " + str(round(df["Close"].iloc[-1], 2))
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
 
-    return "Ask about trend, RSI, or price."
+    signal = "Neutral"
+    if last["Close"] > last["Open"] and prev["Close"] < prev["Open"]:
+        signal = "Bullish Engulfing"
+    elif last["Close"] < last["Open"] and prev["Close"] > prev["Open"]:
+        signal = "Bearish Engulfing"
 
-# =========================================
-# MAIN DASHBOARD
-# =========================================
+    st.metric("Detected Pattern", signal)
 
-left, right = st.columns([3, 1])
+# -------------------------------------------------
+# NEXT‑DAY FORECASTING (ML‑SAFE)
+# -------------------------------------------------
+elif page == "Next-Day Forecasting":
+    st.title("🤖 Next‑Day Forecasting")
 
-with left:
-    st.subheader("Live Market Dashboard")
+    ticker = st.text_input("Enter NSE Symbol", "TRIDENT.NS")
+    df = load_data(ticker)
 
-    try:
-        df = fetch_data(symbol_input, timeframe)
-        df = add_indicators(df)
+    df["Day"] = np.arange(len(df))
+    X = df[["Day"]]
+    y = df["Close"]
 
-        price_chart(df)
+    model = LinearRegression()
+    model.fit(X, y)
 
-        st.subheader("Strategy Overview")
-        st.write("Selected strategies:", strategy_selected)
-        st.write("Current signal:", generate_signal(df))
+    next_day = np.array([[len(df)]])
+    prediction = model.predict(next_day)[0]
 
-        st.subheader("Key Metrics")
-        st.metric("Last Price", round(df["Close"].iloc[-1], 2))
-        st.metric("RSI", round(df["RSI"].iloc[-1], 2))
-        st.metric(
-            "Annual Volatility Percent",
-            round(df["Return"].std() * np.sqrt(252) * 100, 2)
-        )
+    st.metric("Predicted Next Close", f"₹ {round(prediction,2)}")
 
-    except:
-        st.error("Data not available for this symbol.")
-
-with right:
-    st.subheader("Top 5 Trade Ideas")
-    st.dataframe(top5_assets(asset_type), use_container_width=True)
-
-# -----------------------------------------
-# CHATBOT SECTION
-# -----------------------------------------
-st.subheader("Trading Assistant")
-
-question = st.text_input("Ask about trend, RSI or price")
-
-if question:
-    st.success(chatbot_response(question, df))
-
-# -----------------------------------------
-# FOOTER
-# -----------------------------------------
-st.write("Last updated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-st.write("Single file Streamlit app. Strategy logic will be added step by step.")
+    st.caption("Model: Linear Regression (deploy‑safe baseline)")
