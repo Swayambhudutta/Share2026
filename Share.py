@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # CONFIG
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Predict Stocks – India",
+    page_title="Predict Stocks - India",
     page_icon="📈",
     layout="wide"
 )
@@ -19,16 +19,14 @@ st.set_page_config(
 st.markdown("<style>footer{visibility:hidden;}</style>", unsafe_allow_html=True)
 
 # -------------------------------------------------
-# OPEN INDIAN STOCK SEARCH API
+# OPEN INDIAN STOCK SEARCH API (NO KEY)
 # -------------------------------------------------
 @st.cache_data(ttl=300)
 def search_indian_stocks(query):
     url = "http://65.0.104.9/search"
-    params = {"q": query}
     try:
-        r = requests.get(url, params=params, timeout=5)
-        data = r.json()
-        return data.get("results", [])
+        r = requests.get(url, params={"q": query}, timeout=5)
+        return r.json().get("results", [])
     except:
         return []
 
@@ -65,7 +63,7 @@ page = st.sidebar.radio(
         "Technical Analysis",
         "Screener",
         "Pattern Signal",
-        "Next‑Day Forecast"
+        "Next-Day Forecast"
     ]
 )
 
@@ -76,15 +74,15 @@ if page == "Home":
     st.title("📈 Indian Stock Market Screener & Prediction")
 
     st.markdown("""
-An **all‑in‑one Indian stock analysis tool** for NSE stocks.
+An **all-in-one Indian stock analysis tool** for NSE stocks.
 
 ✅ Live market data  
 ✅ Company name search  
 ✅ Technical indicators  
 ✅ Screeners  
-✅ ML‑based next‑day prediction  
+✅ ML-based next-day prediction  
 
-**No API keys required.**
+**No API keys required**
 """)
 
 # -------------------------------------------------
@@ -133,8 +131,7 @@ elif page == "Technical Analysis":
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
-        close=df["Close"],
-        name="Price"
+        close=df["Close"]
     )
     fig.add_scatter(x=df.index, y=df["EMA20"], name="EMA 20")
     fig.add_scatter(x=df.index, y=df["EMA50"], name="EMA 50")
@@ -164,7 +161,7 @@ elif page == "Screener":
     col2.metric("Breakout", breakout)
 
 # -------------------------------------------------
-# PATTERN SIGNAL (RULE‑BASED)
+# PATTERN SIGNAL
 # -------------------------------------------------
 elif page == "Pattern Signal":
     st.title("🕯️ Candlestick Signal")
@@ -184,10 +181,10 @@ elif page == "Pattern Signal":
     st.metric("Detected Signal", signal)
 
 # -------------------------------------------------
-# NEXT‑DAY FORECAST
+# NEXT-DAY FORECAST
 # -------------------------------------------------
-elif page == "Next‑Day Forecast":
-    st.title("🤖 Next‑Day Price Forecast (ML)")
+elif page == "Next-Day Forecast":
+    st.title("🤖 Next-Day Price Forecast")
 
     symbol = st.text_input("Enter NSE Symbol", "TRIDENT.NS")
     df = load_stock_data(symbol)
@@ -202,5 +199,5 @@ elif page == "Next‑Day Forecast":
     prediction = model.predict([[len(df)]])[0]
 
     st.metric("Predicted Next Close", f"₹ {round(prediction,2)}")
-    st.caption("Baseline ML model (deploy‑safe).")
+    st.caption("Baseline ML model (deploy-safe).")
 ``
